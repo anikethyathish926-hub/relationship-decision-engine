@@ -53,8 +53,10 @@ export async function GET(request: Request) {
     .order('created_at', { ascending: false });
 
   // If there's an error from Supabase (like database connection issues),
-  // return a 500 status (Internal Server Error) with the error message
+  // log it to the console for debugging, then return a 500 status
+  // (Internal Server Error) with the error message
   if (error) {
+    console.error('Supabase error:', error);
     return NextResponse.json(
       { error: error.message },
       { status: 500 }

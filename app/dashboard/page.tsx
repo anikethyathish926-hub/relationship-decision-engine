@@ -74,21 +74,26 @@ export default function DashboardPage() {
   /**
    * Fetch events and insights whenever a relationship is selected
    * This useEffect runs whenever selectedRelationship changes
+   * 
+   * When a relationship is selected, it fetches both events and insights.
+   * When no relationship is selected, it clears all related state.
    */
   useEffect(() => {
-    if (selectedRelationship?.id) {
-      fetchEvents(selectedRelationship.id);
-      fetchInsights(selectedRelationship.id);
-      // Clear the insight and analysis error when switching relationships
-      setSelectedInsight(null);
-      setAnalysisError(null);
-    } else {
-      // Clear events, insights, insight, and analysis error if no relationship is selected
+    // If no relationship is selected, clear insight history and return early
+    if (!selectedRelationship?.id) {
       setEvents([]);
       setInsightHistory([]);
       setSelectedInsight(null);
       setAnalysisError(null);
+      return;
     }
+
+    // If a relationship is selected, fetch its events and insights
+    fetchEvents(selectedRelationship.id);
+    fetchInsights(selectedRelationship.id);
+    // Clear the insight and analysis error when switching relationships
+    setSelectedInsight(null);
+    setAnalysisError(null);
   }, [selectedRelationship]);
 
   /**
@@ -578,7 +583,7 @@ export default function DashboardPage() {
             
             {/* Empty state: show when there are no insights yet */}
             {!isLoadingInsights && insightHistory.length === 0 && (
-              <p className="text-gray-600">No past insights yet</p>
+              <p className="text-gray-600">No past insights yet.</p>
             )}
             
             {/* Insight history list: display all insights from newest to oldest */}
@@ -600,9 +605,9 @@ export default function DashboardPage() {
                     <p className="text-gray-800 mb-2">{insight.summary}</p>
                     
                     {/* Display risk and growth scores in a small line */}
+                    {/* Scores are stored as decimals (0-1), so we display them as decimals */}
                     <p className="text-xs text-gray-600">
-                      Risk: {(insight.risk_score * 100).toFixed(1)}% | 
-                      Growth: {(insight.growth_score * 100).toFixed(1)}%
+                      Risk: {insight.risk_score.toFixed(1)}, Growth: {insight.growth_score.toFixed(1)}
                     </p>
                   </div>
                 ))}

@@ -56,6 +56,13 @@ export default function DashboardPage() {
   // State to store analysis-specific error messages
   const [analysisError, setAnalysisError] = useState<string | null>(null);
 
+  // State to store the history of all insights for the selected relationship
+  // This is an array of Insight objects, ordered from newest to oldest
+  const [insightHistory, setInsightHistory] = useState<Insight[]>([]);
+  
+  // State to track if we're currently loading insights from the API
+  const [isLoadingInsights, setIsLoadingInsights] = useState(false);
+
   /**
    * Fetch relationships from the API when the component loads
    * useEffect runs after the component first renders
@@ -65,18 +72,20 @@ export default function DashboardPage() {
   }, []);
 
   /**
-   * Fetch events whenever a relationship is selected
+   * Fetch events and insights whenever a relationship is selected
    * This useEffect runs whenever selectedRelationship changes
    */
   useEffect(() => {
     if (selectedRelationship?.id) {
       fetchEvents(selectedRelationship.id);
+      fetchInsights(selectedRelationship.id);
       // Clear the insight and analysis error when switching relationships
       setSelectedInsight(null);
       setAnalysisError(null);
     } else {
-      // Clear events, insight, and analysis error if no relationship is selected
+      // Clear events, insights, insight, and analysis error if no relationship is selected
       setEvents([]);
+      setInsightHistory([]);
       setSelectedInsight(null);
       setAnalysisError(null);
     }
@@ -139,6 +148,41 @@ export default function DashboardPage() {
     } finally {
       // Always set loading to false when we're done
       setLoadingEvents(false);
+    }
+  }
+
+  /**
+   * Function to fetch insights for a specific relationship
+   * 
+   * This function retrieves all past insights for a relationship from the API.
+   * The insights are already ordered by created_at DESC (newest first) from the API.
+   */
+  async function fetchInsights(relationshipId: string) {
+    try {
+      // Set loading state to true so we can show a loading message
+      setIsLoadingInsights(true);
+      
+      // Make a GET request to fetch insights for this relationship
+      const response = await fetch(`/api/insights?relationship_id=${relationshipId}`);
+      
+      // Check if the request was successful
+      if (!response.ok) {
+        throw new Error('Failed to load insights');
+      }
+      
+      // Parse the JSON response (this will be an array of insight objects)
+      const data = await response.json();
+      
+      // Update the insightHistory state with the fetched data
+      setInsightHistory(data);
+    } catch (err) {
+      // If something went wrong, log the error and set history to empty array
+      console.error('Error loading insights:', err);
+      // Set history to empty array so the UI shows "No past insights yet"
+      setInsightHistory([]);
+    } finally {
+      // Always set loading to false when we're done (whether success or error)
+      setIsLoadingInsights(false);
     }
   }
 
@@ -244,6 +288,12 @@ export default function DashboardPage() {
 
       // Store the insight in state so we can display it
       setSelectedInsight(insight);
+      
+      // Add the new insight to the top of the insight history
+      // This updates the UI immediately without needing to reload from the API
+      // We use the spread operator to create a new array with the new insight first
+      setInsightHistory((prevHistory) => [insight, ...prevHistory]);
+      
       // Clear any previous errors since we succeeded
       setAnalysisError(null);
     } catch (err) {
@@ -516,6 +566,49 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
+
+          {/* Insight History section */}
+          <div className="mb-6 p-4 border border-gray-300 rounded-lg bg-white">
+            <h3 className="text-xl font-semibold mb-3">Insight History</h3>
+            
+            {/* Loading state: show a message while fetching insights */}
+            {isLoadingInsights && (
+              <p className="text-gray-600">Loading insights...</p>
+            )}
+            
+            {/* Empty state: show when there are no insights yet */}
+            {!isLoadingInsights && insightHistory.length === 0 && (
+              <p className="text-gray-600">No past insights yet</p>
+            )}
+            
+            {/* Insight history list: display all insights from newest to oldest */}
+            {!isLoadingInsights && insightHistory.length > 0 && (
+              <div className="space-y-4">
+                {insightHistory.map((insight) => (
+                  <div
+                    key={insight.id}
+                    className="p-3 border border-gray-200 rounded-md bg-gray-50"
+                  >
+                    {/* Display the date and time when this insight was created */}
+                    {insight.created_at && (
+                      <p className="text-sm font-semibold text-gray-600 mb-2">
+                        {new Date(insight.created_at).toLocaleString()}
+                      </p>
+                    )}
+                    
+                    {/* Display the summary of this insight */}
+                    <p className="text-gray-800 mb-2">{insight.summary}</p>
+                    
+                    {/* Display risk and growth scores in a small line */}
+                    <p className="text-xs text-gray-600">
+                      Risk: {(insight.risk_score * 100).toFixed(1)}% | 
+                      Growth: {(insight.growth_score * 100).toFixed(1)}%
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Form to add a new event */}
           <div className="border-t border-gray-300 pt-4">

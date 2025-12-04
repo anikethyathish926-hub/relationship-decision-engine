@@ -83,10 +83,41 @@ export async function POST(request: Request) {
 
     console.log('Fetched events count:', events?.length ?? 0);
 
-    // 5. Build prompt for Groq
+    // 5. Fetch recent chat messages for this relationship as additional context.
+    // We use the relationship_id as the thread_id so that all chat messages
+    // related to this relationship can be grouped together.
+    const { data: messages, error: messagesError } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('thread_id', relationship_id)
+      .order('timestamp', { ascending: false })
+      .limit(20);
+
+    // If there's an error fetching messages, log it but don't fail the whole request.
+    // The model can still analyze the relationship using only events.
+    if (messagesError) {
+      console.error('Messages fetch error:', messagesError);
+    }
+
+    // Build a human-readable text version of the messages for the prompt.
+    // Each line looks like: [timestamp] ME/THEM: text
+    const messagesText =
+      messages && messages.length > 0
+        ? messages
+            .map((m) => {
+              const who = m.from_me ? 'ME' : 'THEM';
+              return `[${m.timestamp}] ${who}: ${m.text ?? ''}`;
+            })
+            .join('\n')
+        : 'No chat messages available.';
+
+    console.log('Fetched messages count:', messages?.length ?? 0);
+
+    // 6. Build prompt for Groq
+    // NOTE: We now provide both Events and Messages to give the model richer context.
     const promptText = `
-You are a relationship analysis engine. Analyze the following relationship and events.
-Respond ONLY with valid JSON, no extra text. Match this exact shape:
+You are a relationship analysis engine. Analyze the relationship, events, and chat messages below.
+Respond ONLY with valid JSON in this shape:
 {
   "summary": string,
   "pattern": string,
@@ -103,11 +134,14 @@ Notes: ${relationship.notes ?? 'None'}
 
 Events:
 ${eventsText}
+
+Messages:
+${messagesText}
     `;
 
     console.log('Calling Groq API...');
 
-    // 6. Call Groq API using fetch
+    // 7. Call Groq API using fetch
     const groqResponse = await fetch(
       'https://api.groq.com/openai/v1/chat/completions',
       {
@@ -168,7 +202,7 @@ ${eventsText}
       );
     }
 
-    // 7. Parse Groq JSON safely
+    // 8. Parse Groq JSON safely
     let parsed: any;
     try {
       parsed = JSON.parse(aiText);
@@ -183,7 +217,7 @@ ${eventsText}
 
     console.log('Parsed insight:', parsed);
 
-    // 8. Insert insight into Supabase
+    // 9. Insert insight into Supabase
     const { error: insertError } = await supabase.from('insights').insert({
       relationship_id,
       summary: parsed.summary,
@@ -204,7 +238,7 @@ ${eventsText}
 
     console.log('Successfully inserted insight for relationship:', relationship_id);
 
-    // 9. Return parsed insight to the client
+    // 10. Return parsed insight to the client
     return NextResponse.json(parsed);
   } catch (err: any) {
     console.error('Unexpected error in /api/analyze:', err);

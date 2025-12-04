@@ -52,6 +52,10 @@ export default function DashboardPage() {
   
   // State to track if we're currently analyzing a relationship
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // State to show a simple status message when we send a sample conversation
+  // This is just for testing the /api/messages endpoint.
+  const [sampleConversationStatus, setSampleConversationStatus] = useState<string | null>(null);
   
   // State to store analysis-specific error messages
   const [analysisError, setAnalysisError] = useState<string | null>(null);
@@ -313,6 +317,78 @@ export default function DashboardPage() {
   }
 
   /**
+   * Handle clicking the "Send Sample Conversation" test button
+   *
+   * This function sends a hard-coded sample conversation to the /api/messages
+   * endpoint to test the new messages ingestion API.
+   */
+  async function handleSendSampleConversation() {
+    // Make sure we have a selected relationship before sending
+    if (!selectedRelationship?.id) {
+      alert('Please select a relationship first');
+      return;
+    }
+
+    try {
+      // Clear any previous status message
+      setSampleConversationStatus(null);
+
+      // Build a simple thread ID based on the selected relationship,
+      // so messages can be grouped per relationship.
+      const threadId = `relationship-${selectedRelationship.id}`;
+
+      // Prepare the request body to match the /api/messages schema
+      const body = {
+        user_id: 'test-user-1',
+        platform: 'whatsapp',
+        thread_id: threadId,
+        messages: [
+          {
+            from_me: true,
+            text: "Hey, how are you?",
+            timestamp: "2025-11-29T14:35:00Z",
+          },
+          {
+            from_me: false,
+            text: "I’m okay, just a bit stressed.",
+            timestamp: "2025-11-29T14:36:00Z",
+          },
+          {
+            from_me: true,
+            text: "Want to talk about it later?",
+            timestamp: "2025-11-29T14:37:00Z",
+          },
+        ],
+      };
+
+      // Send the POST request to our messages API route
+      const response = await fetch('/api/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        // If the response is not OK, log the error details and show a basic status
+        const errorData = await response.json().catch(() => null);
+        console.error('Failed to send sample conversation:', errorData || response.statusText);
+        setSampleConversationStatus('Failed to send sample conversation.');
+        return;
+      }
+
+      // On success, set a simple success message and log to the console
+      console.log('Sample conversation sent successfully');
+      setSampleConversationStatus('Sample conversation sent.');
+    } catch (err) {
+      // Catch any unexpected errors (network issues, etc.)
+      console.error('Error sending sample conversation:', err);
+      setSampleConversationStatus('Failed to send sample conversation.');
+    }
+  }
+
+  /**
    * Handle form submission to create a new event
    */
   async function handleEventSubmit(e: React.FormEvent) {
@@ -516,13 +592,32 @@ export default function DashboardPage() {
 
           {/* Analyze button section */}
           <div className="mb-6 border-t border-gray-300 pt-4">
-            <button
-              onClick={handleAnalyze}
-              disabled={isAnalyzing}
-              className="px-6 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:bg-gray-400"
-            >
-              {isAnalyzing ? 'Analyzing...' : 'Analyze Relationship'}
-            </button>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              {/* Analyze Relationship button (existing behavior) */}
+              <button
+                onClick={handleAnalyze}
+                disabled={isAnalyzing}
+                className="px-6 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 disabled:bg-gray-400"
+              >
+                {isAnalyzing ? 'Analyzing...' : 'Analyze Relationship'}
+              </button>
+
+              {/* Temporary test button to send a sample conversation */}
+              <button
+                type="button"
+                onClick={handleSendSampleConversation}
+                className="px-6 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
+              >
+                Send Sample Conversation
+              </button>
+            </div>
+
+            {/* Simple status text for the sample conversation request */}
+            {sampleConversationStatus && (
+              <p className="mt-2 text-sm text-gray-600">
+                {sampleConversationStatus}
+              </p>
+            )}
             
             {/* Display analysis error if one occurred */}
             {analysisError && (
